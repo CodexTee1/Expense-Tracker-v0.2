@@ -1,8 +1,8 @@
-from flask import Flask, render_template, request, url_for, make_response, redirect, Response
-from flask_sqlalchemy import SQLAlchemy
-from datetime import date as dt_date
-from flask import flash
+import os
 from datetime import date, datetime
+
+from flask import Flask, Response, flash, redirect, render_template, request, url_for
+from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 
 #SUM()  #sql func, it sums all the values of all rows
@@ -11,7 +11,7 @@ app = Flask(__name__)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///expenses.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SECRET_KEY"] = "my_secret_key"  #used for
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
 db = SQLAlchemy(app)
 
 class Expense(db.Model):
@@ -24,7 +24,7 @@ class Expense(db.Model):
 with app.app_context():
     db.create_all()
 
-CATEGORIES = ['food', 'transport', 'rent', 'utilities', 'health']
+CATEGORIES = ["Food", "Transport", "Rent", "Utilities", "Health"]
 
 def parse_date_or_none(s: str):
     if not s:
@@ -47,7 +47,7 @@ def index():
     if start_date and end_date and end_date < start_date:
         flash("End date cannot be before start date", "error")
         start_date = end_date = None   #basically restarts or resets the start and end date
-        end_str = end_str = ""  #basically restarts or resets the start and end date
+        start_str = end_str = ""  #basically restarts or resets the start and end date
 
     q = Expense.query
     if start_date:
@@ -64,7 +64,7 @@ def index():
     total = round(sum(e.amount for e in expenses), 2)
     
 
-#pie chart
+    # pie chart
     cat_q = db.session.query(Expense.category, func.sum(Expense.amount))  #cat_q = category query
 
     if start_date:
@@ -82,7 +82,7 @@ def index():
     cat_values = [round(float(s or 0), 2) for _, s in cat_rows]
 
 
-#day chart
+    # day chart
     day_q = db.session.query(Expense.date, func.sum(Expense.amount))  #day_q = category query
 
     if start_date:
@@ -106,14 +106,13 @@ def index():
 
 
     return render_template(
-
-        "index.html", 
+        "index.html",
         expenses=expenses,
         categories = CATEGORIES,
         today = date.today().isoformat(),
         total = total,
         start_str = start_str,
-        end_str = end_str,
+        end_str = end_str, 
         selected_category = selected_category,
         cat_labels = cat_labels,
         cat_values = cat_values,
@@ -123,7 +122,7 @@ def index():
         
     )
 
-@app.route("/add", methods=['POST'])
+@app.route("/add", methods=["POST"])
 def add():
 
     description = (request.form.get("description") or "").strip() #going to return a string instead of none to prevent an error
@@ -132,7 +131,7 @@ def add():
     date_str = (request.form.get("date") or "").strip()
 
     if not description or not amount_str or not category:
-        flash("please fill description category", "error")
+        flash("Please fill in description, amount, and category", "error")
         return redirect(url_for("index"))
 
     try:
@@ -149,6 +148,10 @@ def add():
         d = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date.today()
     except ValueError:
         d = date.today()
+
+    if category not in CATEGORIES:
+        flash("Please choose a valid category", "error")
+        return redirect(url_for("index"))
 
     e = Expense(description = description, amount = amount, category = category, date = d)
     db.session.add(e)
@@ -167,23 +170,41 @@ def delete(expense_id):
     return redirect(url_for("index"))
 
 
-@app.route("/edit/<int:expense_id>", methods=["GET"])
-def edit(expense_id):
-    e = Expense.query.get_or_404(expense_id)
-
-    return render_template("edit.html", expense=e, categories=CATEGORIES, today=dt_date.today().isoformat())
-
-
-
 @app.route("/edit/<int:expense_id>", methods=["GET", "POST"])
 def edit_expense(expense_id):
     e = Expense.query.get_or_404(expense_id)
 
     if request.method == "POST":
-        e.description = request.form["description"]
-        e.amount = float(request.form["amount"])
-        e.category = request.form["category"]
-        e.date = datetime.strptime(request.form["date"], "%Y-%m-%d").date()
+        description = (request.form.get("description") or "").strip()
+        amount_str = (request.form.get("amount") or "").strip()
+        category = (request.form.get("category") or "").strip()
+        date_str = (request.form.get("date") or "").strip()
+
+        if not description or not amount_str or not category:
+            flash("Please fill in description, amount, and category", "error")
+            return redirect(url_for("edit_expense", expense_id=expense_id))
+
+        try:
+            amount = float(amount_str)
+            if amount <= 0:
+                raise ValueError
+        except ValueError:
+            flash("Amount must be a positive number", "error")
+            return redirect(url_for("edit_expense", expense_id=expense_id))
+
+        try:
+            d = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date.today()
+        except ValueError:
+            d = date.today()
+
+        if category not in CATEGORIES:
+            flash("Please choose a valid category", "error")
+            return redirect(url_for("edit_expense", expense_id=expense_id))
+
+        e.description = description
+        e.amount = amount
+        e.category = category
+        e.date = d
 
         db.session.commit()
         flash("Expense updated", "success")
@@ -219,21 +240,21 @@ def export_csv():
 
     expenses = q.order_by(Expense.date, Expense.id).all()
 
-    lines = ["date, description, category, amount"]
+    lines = ["date,description,category,amount"]
 
     for e in expenses:
-        lines.append(f"{e.date.isoformat()}, {e.description}, {e.category}, {e.amount:.2f}")
+        lines.append(f"{e.date.isoformat()},{e.description},{e.category},{e.amount:.2f}")
     csv_data = "\n".join(lines)
 
     fname_start = start_str or "all"
     fname_end = end_str or "all"
     file_name = f"Expenses from {fname_start} to {fname_end}.csv"
 
-    return Response (
+    return Response(
         csv_data,
         headers = {
             "Content-Type": "text/csv",
-            "Content-Disposition": f"attachment; filename=CSV file"
+            "Content-Disposition": f'attachment; filename="{file_name}"'
         }
     )
 
