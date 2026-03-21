@@ -62,6 +62,7 @@ def index():
 
     expenses = q.order_by(Expense.date.desc(), Expense.id.desc()).all()
     total = round(sum(e.amount for e in expenses), 2)
+    expense_count = len(expenses)
     
 
     # pie chart
@@ -80,6 +81,15 @@ def index():
     
     cat_labels = [c for c, _ in cat_rows]
     cat_values = [round(float(s or 0), 2) for _, s in cat_rows]
+    top_category = None
+    if cat_rows:
+        top_category_name, top_category_total = max(
+            cat_rows, key=lambda row: float(row[1] or 0)
+        )
+        top_category = {
+            "name": top_category_name,
+            "total": round(float(top_category_total or 0), 2),
+        }
 
 
     # day chart
@@ -105,12 +115,24 @@ def index():
     day_values = [round(float(s or 0), 2) for _, s in day_rows]
 
 
+    latest_expense = None
+    if expenses:
+        latest = expenses[0]
+        latest_expense = {
+            "description": latest.description,
+            "date": latest.date.isoformat(),
+            "amount": round(float(latest.amount or 0), 2),
+        }
+
     return render_template(
         "index.html",
         expenses=expenses,
         categories = CATEGORIES,
         today = date.today().isoformat(),
         total = total,
+        expense_count=expense_count,
+        top_category=top_category,
+        latest_expense=latest_expense,
         start_str = start_str,
         end_str = end_str, 
         selected_category = selected_category,
