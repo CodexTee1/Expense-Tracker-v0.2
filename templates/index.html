@@ -91,15 +91,15 @@
               {% endfor %}
             </select>
           </label>
-          <div class="flex gap-2">
+          <div class="flex gap-2 md:col-span-1">
             <button
-              class="rounded-xl bg-brand/20 hover:bg-brand/30 text-brand px-4 py-2 border border-brand/30"
+              class="flex-1 rounded-xl bg-brand/20 hover:bg-brand/30 text-brand px-3 py-2 border border-brand/30"
               type="submit"
             >
               Apply
             </button>
             <a
-              class="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-center text-slate-200 hover:bg-slate-700"
+              class="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-center text-slate-200 hover:bg-slate-700"
               href="{{url_for('index') }}"
             >
               Reset
